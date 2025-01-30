@@ -24,9 +24,12 @@ The Ansible playbooks listed here will allow for simpler intallation of Qumulo C
 Example:
 
     `ssh-copy-id -i ~/.ssh/id_rsa.pub yourlinuxuser@1.2.3.4`
+
+- **Optional** - Copy `qumulo-core.rpm/.deb` direclty to each future node's `/tmp` directory.
+    - This might be a desirable option if the connection between the Ansible controller and the nodes is slow.
 - Run the playbook:
 
-    `ansible-playbook qnode-setup.yml -i hosts -K`
+    `ansible-playbook rhel-qnode-setup.yml -i hosts -K`
 
 `-i` points to your hosts file, if ommiting this then Ansible will use the default `/etc/ansible/hosts` file
 
