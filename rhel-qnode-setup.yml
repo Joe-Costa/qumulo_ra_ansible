@@ -76,15 +76,11 @@
       ansible.builtin.debug:
         msg: "qumulo-core.rpm is present: {{ remote_file_stat.stat.exists }}, Checksum: {{ remote_file_stat.stat.checksum if remote_file_stat.stat.exists else 'N/A' }}"
       
-    - name: Get checksum of local qumulo-core.rpm
-      set_fact:
-        local_file_checksum: "{{ lookup('file', playbook_dir + '/qumulo-core.rpm') | checksum }}"
-      
     - name: Copy qumulo-core.rpm to Node if needed
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/qumulo-core.rpm"
         dest: /tmp/qumulo-core.rpm
-      when: remote_file_stat.stat.exists == False or remote_file_stat.stat.checksum != local_file_checksum
+      when: remote_file_stat.stat.exists == False
       
     - name: Install qumulo-core.rpm
       ansible.builtin.dnf:
