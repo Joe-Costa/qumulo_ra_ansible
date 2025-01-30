@@ -29,4 +29,5 @@ Example:
     `ansible-playbook qnode-setup.yml -i hosts -K`
 
 `-i` points to your hosts file, if ommiting this then Ansible will use the default `/etc/ansible/hosts` file
+
 `-K` will prompt you for your remote Linux user's password
