@@ -1,0 +1,93 @@
+---
+- name: Configure Rocky or RedHat Linux System
+  # Change this to match your hosts section
+  hosts: nodes
+  become: yes
+  # Change remote_user to match your Linux account
+  remote_user: qumulo
+  tasks:
+
+    - name: Disable and stop firewalld
+      ansible.builtin.systemd:
+        name: firewalld
+        enabled: no
+        state: stopped
+
+    - name: Set SELinux to permissive
+      ansible.builtin.command:
+        cmd: setenforce 0
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Make SELinux changes persistent
+      ansible.builtin.lineinfile:
+        path: /etc/selinux/config
+        regexp: '^SELINUX='
+        line: 'SELINUX=permissive'
+
+    - name: Apply kernel parameter kernel.io_uring_disabled=0
+      ansible.builtin.sysctl:
+        name: kernel.io_uring_disabled
+        value: "0"
+        sysctl_set: yes
+
+    - name: Disable and stop NetworkManager
+      ansible.builtin.systemd:
+        name: NetworkManager
+        enabled: no
+        state: stopped
+
+    - name: Enable EPEL repository
+      ansible.builtin.dnf:
+        name: epel-release
+        state: present
+
+    - name: Install systemd-networkd
+      ansible.builtin.dnf:
+        name: systemd-networkd
+        state: present
+
+    - name: Enable and start systemd-networkd
+      ansible.builtin.systemd:
+        name: systemd-networkd
+        enabled: yes
+        state: started
+
+    - name: Install systemd-container and systemd-resolved
+      ansible.builtin.dnf:
+        name:
+          - systemd-container
+          - systemd-resolved
+        state: present
+
+    - name: Enable and start systemd-resolved
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        enabled: yes
+        state: started
+
+    - name: Check if qumulo-core.rpm exists on Node and get its checksum
+      ansible.builtin.stat:
+        path: /tmp/qumulo-core.rpm
+      register: remote_file_stat
+      ignore_errors: yes
+
+    - name: Report state of qumulo-core.rpm on remote node
+      ansible.builtin.debug:
+        msg: "qumulo-core.rpm is present: {{ remote_file_stat.stat.exists }}, Checksum: {{ remote_file_stat.stat.checksum if remote_file_stat.stat.exists else 'N/A' }}"
+      
+    - name: Get checksum of local qumulo-core.rpm
+      set_fact:
+        local_file_checksum: "{{ lookup('file', playbook_dir + '/qumulo-core.rpm') | checksum }}"
+      
+    - name: Copy qumulo-core.rpm to Node if needed
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/qumulo-core.rpm"
+        dest: /tmp/qumulo-core.rpm
+      when: remote_file_stat.stat.exists == False or remote_file_stat.stat.checksum != local_file_checksum
+      
+    - name: Install qumulo-core.rpm
+      ansible.builtin.dnf:
+        name: /tmp/qumulo-core.rpm
+        state: present
+        disable_gpg_check: yes
