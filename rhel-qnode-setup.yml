@@ -76,7 +76,7 @@
       ansible.builtin.debug:
         msg: "qumulo-core.rpm is present: {{ remote_file_stat.stat.exists }}, Checksum: {{ remote_file_stat.stat.checksum if remote_file_stat.stat.exists else 'N/A' }}"
       
-    - name: Copy qumulo-core.rpm to Node if needed
+    - name: Copy qumulo-core.rpm to Node if needed (This may take some time)
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/qumulo-core.rpm"
         dest: /tmp/qumulo-core.rpm
