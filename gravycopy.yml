@@ -1,0 +1,14 @@
+---
+  # This playbook is for Qumulo internal purposes, but may be modified to help expedite installs
+  # in other envirnonments
+  - name: Download qumulo-core.deb to /tmp
+    hosts: all
+    become: yes
+    remote_user: qumulo
+    tasks:
+      - name: Download the qumulo-core.deb file
+        ansible.builtin.get_url:
+          url: https://gravyweb.eng.qumulo.com/release/7.4.0/src/build/release/install/qumulo-core.deb
+          dest: /tmp/qumulo-core.deb
+          mode: '0644'
+  
