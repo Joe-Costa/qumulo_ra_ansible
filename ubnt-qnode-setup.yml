@@ -7,6 +7,19 @@
   remote_user: qumulo
   tasks:
 
+  - name: Verify Linux version
+    fail:
+      msg: "This is the wrong playbook for a RHEL/Rocky node!!! Quitting..."
+    when: ansible_os_family == "RedHat"
+
+  - name: Gathering service facts
+    service_facts:
+
+  - name: Check to see if qumulo-qcore is already present
+    fail:
+      msg: "qumulo-qcore is already loaded on this host!! Aborting playbook execution."
+    when: "'qumulo-qcore.service' in ansible_facts.services"
+
   - name: Check if NetworkManager is active
     systemd:
       name: NetworkManager
