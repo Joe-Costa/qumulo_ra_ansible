@@ -5,7 +5,15 @@ The Ansible playbooks listed here will allow for simpler intallation of Qumulo C
 This tooling is meant for on-prem or virtual cluster installs and is not a replacement for Terraform for provisioning Cloud
 Native Qumulo clusters.
 
+**Important:**
+
+Please review our Installing Qumulo Core Package documentation first.
+
+https://docs.qumulo.com/administrator-guide/getting-started/installing-product-package.html
+
+
 **Currently RHEL and Rocky Linux only are supported!  Ubuntu support is in beta!**
+
 
 ## Directions:
 
