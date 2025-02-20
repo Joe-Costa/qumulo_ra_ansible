@@ -7,7 +7,7 @@
   remote_user: qumulo
   tasks:
 
-    - name: Verify Linux version
+    - name: Verify distro compatibilty with this playbook
       fail:
         msg: "This is the wrong playbook for an Ubuntu/Debian node!!! Quitting..."
       when: ansible_os_family == "Debian"
@@ -50,28 +50,40 @@
         enabled: no
         state: stopped
 
-    - name: Enable EPEL repository
+    - name: Enable EPEL repository (Rocky only)
       ansible.builtin.dnf:
         name: epel-release
         state: present
+      when: "'rocky' in ansible_distribution | lower"
 
-    - name: Install systemd-networkd
+    - name: Install systemd-networkd (Rocky only)
       ansible.builtin.dnf:
         name: systemd-networkd
         state: present
+      when: "'rocky' in ansible_distribution | lower"
 
-    - name: Enable and start systemd-networkd
+    - name: Enable and start systemd-networkd (Rocky only)
       ansible.builtin.systemd:
         name: systemd-networkd
         enabled: yes
         state: started
+      when: "'rocky' in ansible_distribution | lower"
 
-    - name: Install systemd-container and systemd-resolved
+    - name: Install systemd-container and systemd-resolved (Rocky only)
       ansible.builtin.dnf:
         name:
           - systemd-container
           - systemd-resolved
         state: present
+      when: "'rocky' in ansible_distribution | lower"
+    
+    - name: Install podman and systemd-resolved (RHEL only)
+      ansible.builtin.dnf:
+        name:
+          - podman
+          - systemd-resolved
+        state: present
+      when: ansible_distribution in ["RedHat", "Red Hat Enterprise Linux"]
 
     - name: Enable and start systemd-resolved
       ansible.builtin.systemd:
