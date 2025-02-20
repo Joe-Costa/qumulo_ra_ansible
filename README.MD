@@ -12,7 +12,11 @@ Please review our Installing Qumulo Core Package documentation first.
 https://docs.qumulo.com/administrator-guide/getting-started/installing-product-package.html
 
 
-**Currently RHEL and Rocky Linux only are supported!  Ubuntu support is in beta!**
+This process has been tested with:
+
+- RHEL 9.4
+- Rocky 9.3
+- Ubuntu 22.04 and 24.04
 
 
 ## Directions:
