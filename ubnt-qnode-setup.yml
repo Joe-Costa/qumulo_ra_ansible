@@ -1,96 +1,117 @@
 ---
-- name: Configure Debian or Ubuntu system
-  # Change this to match your hosts section
-  hosts: nodes
-  become: yes
-  # Change remote_user to match your Linux account
-  remote_user: qumulo
-  tasks:
-
-  - name: Verify Linux version
-    fail:
-      msg: "This is the wrong playbook for a RHEL/Rocky node!!! Quitting..."
-    when: ansible_os_family == "RedHat"
-
-  - name: Gathering service facts
-    service_facts:
-
-  - name: Check to see if qumulo-qcore is already present
-    fail:
-      msg: "qumulo-qcore is already loaded on this host!! Aborting playbook execution."
-    when: "'qumulo-qcore.service' in ansible_facts.services"
-
-  - name: Check if NetworkManager is active
-    systemd:
-      name: NetworkManager
-      state: started
-    register: networkmanager_status
-    failed_when: false
-    changed_when: false
-
-  - name: Check if NetworkManager is enabled
-    command: systemctl is-enabled NetworkManager
-    register: networkmanager_enabled
-    failed_when: false
-    changed_when: false
-
-  - name: Check if systemd-networkd is active
-    systemd:
-      name: systemd-networkd
-      state: started
-    register: systemd_networkd_status
-    failed_when: false
-    changed_when: false   
+  - name: Configure Debian or Ubuntu system
+    # Change this to match your hosts section
+    hosts: nodes
+    become: yes
+    # Change remote_user to match your Linux account
+    remote_user: qumulo
+    tasks:
   
-  - name: Stop NetworkManager if needed
-    ansible.builtin.systemd:
-      name: NetworkManager
-      enabled: no
-      state: stopped
-    when: networkmanager_status == "started"
+    - name: Verify Linux version
+      fail:
+        msg: "This is the wrong playbook for a RHEL/Rocky node!!! Quitting..."
+      when: ansible_os_family == "RedHat"
   
-  - name: Disable NetworkManager if needed
-    ansible.builtin.systemd:
-      name: NetworkManager
-      enabled: no
-      state: stopped
-    when: networkmanager_enabled.stdout == "enabled"
-
-  - name: Enable and start systemd-networkd
-    ansible.builtin.systemd:
-      name: systemd-networkd
-      enabled: yes
-      state: started
-    when: systemd_networkd_status != "started"
-
-  - name: Install systemd-container
-    ansible.builtin.apt:
-      name:
-        - systemd-container
-      state: present
-
-  - name: Check if qumulo-core.deb exists on Node and get its checksum
-    ansible.builtin.stat:
-      path: /tmp/qumulo-core.deb
-    register: remote_file_stat
-    ignore_errors: yes
-
-  - name: Report state of qumulo-core.deb on remote node
-    ansible.builtin.debug:
-      msg: "qumulo-core.deb is present: {{ remote_file_stat.stat.exists }}, Checksum: {{ remote_file_stat.stat.checksum if remote_file_stat.stat.exists else 'N/A' }}"
+    - name: Gathering service facts
+      service_facts:
+  
+    - name: Check to see if qumulo-qcore is already present
+      fail:
+        msg: "qumulo-qcore is already loaded on this host!! Aborting playbook execution."
+      when: "'qumulo-qcore.service' in ansible_facts.services"
+  
+    - name: Check if NetworkManager is active
+      systemd:
+        name: NetworkManager
+        state: started
+      register: networkmanager_status
+      failed_when: false
+      changed_when: false
+  
+    - name: Check if NetworkManager is enabled
+      command: systemctl is-enabled NetworkManager
+      register: networkmanager_enabled
+      failed_when: false
+      changed_when: false
     
-  - name: Copy qumulo-core.deb to Node if needed (This may take some time)
-    ansible.builtin.copy:
-      src: "{{ playbook_dir }}/qumulo-core.deb"
-      dest: /tmp/qumulo-core.deb
-    when: remote_file_stat.stat.exists == False
-    
-  - name: Install qumulo-core.deb
-    apt:
-      deb: /tmp/qumulo-core.deb
-      state: present
+    - name: Install linux-tools for the current kernel
+      apt:
+        name:
+          - "linux-tools-{{ ansible_kernel }}"
+        state: present
+        update_cache: yes
 
-  - name: Clean up - Remove the qumulo-core.deb file
-    file:
-      path: /tmp/qumulo-core.deb
-      state: absent
+    - name: Check if systemd-networkd is active
+      systemd:
+        name: systemd-networkd
+        state: started
+      register: systemd_networkd_status
+      failed_when: false
+      changed_when: false   
+
+    - name: Stop systemd-timesyncd if in use
+      ansible.builtin.systemd:
+        name: systemd-timesyncd.service
+        state: stopped
+      ignore_errors: yes
+    
+    - name: Mask and stop systemd-timesyncdapparmor_parser
+      ansible.builtin.shell: >
+        systemctl mask --now systemd-timesyncdapparmor_parser -R /etc/apparmor.d/usr.sbin.chronyd ||
+        echo "apparmor not in use"
+      args:
+        executable: /bin/bash
+      ignore_errors: yes
+    
+    - name: Stop NetworkManager if needed
+      ansible.builtin.systemd:
+        name: NetworkManager
+        enabled: no
+        state: stopped
+      when: networkmanager_status == "started"
+    
+    - name: Disable NetworkManager if needed
+      ansible.builtin.systemd:
+        name: NetworkManager
+        enabled: no
+        state: stopped
+      when: networkmanager_enabled.stdout == "enabled"
+  
+    - name: Enable and start systemd-networkd
+      ansible.builtin.systemd:
+        name: systemd-networkd
+        enabled: yes
+        state: started
+      when: systemd_networkd_status != "started"
+  
+    - name: Install systemd-container
+      ansible.builtin.apt:
+        name:
+          - systemd-container
+        state: present
+  
+    - name: Check if qumulo-core.deb exists on Node and get its checksum
+      ansible.builtin.stat:
+        path: /tmp/qumulo-core.deb
+      register: remote_file_stat
+      ignore_errors: yes
+  
+    - name: Report state of qumulo-core.deb on remote node
+      ansible.builtin.debug:
+        msg: "qumulo-core.deb is present: {{ remote_file_stat.stat.exists }}, Checksum: {{ remote_file_stat.stat.checksum if remote_file_stat.stat.exists else 'N/A' }}"
+      
+    - name: Copy qumulo-core.deb to Node if needed (This may take some time)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/qumulo-core.deb"
+        dest: /tmp/qumulo-core.deb
+      when: remote_file_stat.stat.exists == False
+      
+    - name: Install qumulo-core.deb
+      apt:
+        deb: /tmp/qumulo-core.deb
+        state: present
+  
+    - name: Clean up - Remove the qumulo-core.deb file
+      file:
+        path: /tmp/qumulo-core.deb
+        state: absent
