@@ -29,24 +29,28 @@
       register: nm_version_output
       changed_when: false
 
+    - name: Set fact if NetworkManager upgrade is needed
+      ansible.builtin.set_fact:
+        nm_upgrade_needed: "{{ nm_version_output.stdout is version('1.42', '<') }}"
+
     # NetworkManager 1.42+ is required for support of IPVLANs
     - name: Upgrade NetworkManager to latest available version
       ansible.builtin.dnf:
         name: NetworkManager
         state: latest
-      when: nm_version_output.stdout is version('1.42', '<')
+      when: nm_upgrade_needed
 
     - name: Re-check NetworkManager version after upgrade
       ansible.builtin.command:
         cmd: NetworkManager --version
-      register: nm_version_output
+      register: nm_version_after_upgrade
       changed_when: false
-      when: nm_version_output.stdout is version('1.42', '<')
+      when: nm_upgrade_needed
 
     - name: Verify NetworkManager version is 1.42 or above
       fail:
-        msg: "NetworkManager version {{ nm_version_output.stdout }} is below 1.42. Unable to upgrade to required version."
-      when: nm_version_output.stdout is version('1.42', '<')
+        msg: "NetworkManager version {{ nm_version_after_upgrade.stdout }} is below 1.42. Unable to upgrade to required version."
+      when: nm_upgrade_needed and nm_version_after_upgrade.stdout is version('1.42', '<')
 
     - name: Disable and stop firewalld
       ansible.builtin.systemd:
