@@ -23,6 +23,18 @@
         msg: "qumulo-qcore is already loaded on this host!! Aborting playbook execution."
       when: "'qumulo-qcore.service' in ansible_facts.services"
 
+    - name: Get NetworkManager version
+      ansible.builtin.command:
+        cmd: NetworkManager --version
+      register: nm_version_output
+      changed_when: false
+
+    - name: Verify NetworkManager version is 1.42 or above
+    # NetworkManager 1.42+ is required for support of IPVLANs
+      fail:
+        msg: "NetworkManager version {{ nm_version_output.stdout }} is below 1.42. Please upgrade NetworkManager before proceeding."
+      when: nm_version_output.stdout is version('1.42', '<')
+
     - name: Disable and stop firewalld
       ansible.builtin.systemd:
         name: firewalld
