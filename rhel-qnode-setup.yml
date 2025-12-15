@@ -114,3 +114,16 @@
         name: /tmp/qumulo-core.rpm
         state: present
         disable_gpg_check: yes
+
+    # Reinstall openssh to match any OpenSSL version changes from qumulo-core dependencies
+    - name: Reinstall openssh-server to match OpenSSL version
+      ansible.builtin.dnf:
+        name:
+          - openssh-server
+          - openssh-clients
+        state: latest
+
+    - name: Restart sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: restarted

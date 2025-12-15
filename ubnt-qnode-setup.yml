@@ -112,7 +112,20 @@
       apt:
         deb: /tmp/qumulo-core.deb
         state: present
-  
+
+    # Reinstall openssh to match any OpenSSL version changes from qumulo-core dependencies
+    - name: Reinstall openssh-server to match OpenSSL version
+      ansible.builtin.apt:
+        name:
+          - openssh-server
+          - openssh-client
+        state: latest
+
+    - name: Restart sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: restarted
+
     - name: Clean up - Remove the qumulo-core.deb file
       file:
         path: /tmp/qumulo-core.deb
