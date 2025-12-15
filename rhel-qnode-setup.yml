@@ -1,3 +1,5 @@
+# This playbook is intended to configure Rocky Linux or RedHat Linux hosted Qumulo-managed network mode nodes
+# DO NOT USE this playebook if you intend to create a host-managed network Qumulo cluster.
 ---
 - name: Configure Rocky or RedHat Linux System
   # Change this to match your hosts section

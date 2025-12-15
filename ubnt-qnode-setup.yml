@@ -1,3 +1,5 @@
+# This playbook is intended to configure Ubuntu hosted Qumulo nodes in Qumulo-managed network mode.
+# DO NOT USE this playbook if you intended to create a host-managed network Qumulo cluster.
 ---
   - name: Configure Debian or Ubuntu system
     # Change this to match your hosts section
