@@ -50,6 +50,11 @@
           - systemd-container
         state: present
 
+    - name: Install sshpass
+      ansible.builtin.apt:
+        name: sshpass
+        state: present
+
     - name: Check if qumulo-core.deb exists on Node and get its checksum
       ansible.builtin.stat:
         path: /tmp/qumulo-core.deb

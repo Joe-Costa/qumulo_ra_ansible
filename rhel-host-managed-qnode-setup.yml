@@ -91,6 +91,11 @@
         state: present
       when: "'rocky' in ansible_distribution | lower"
 
+    - name: Install sshpass
+      ansible.builtin.dnf:
+        name: sshpass
+        state: present
+
     - name: Install podman and systemd-resolved (RHEL only)
       ansible.builtin.dnf:
         name:
