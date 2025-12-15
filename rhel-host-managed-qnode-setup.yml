@@ -124,3 +124,16 @@
         disable_gpg_check: yes
       environment:
         QUMULO_NETWORK_MANAGED_BY_HOST: "true"
+
+    # Reinstall openssh to match any OpenSSL version changes from qumulo-core dependencies
+    - name: Reinstall openssh-server to match OpenSSL version
+      ansible.builtin.dnf:
+        name:
+          - openssh-server
+          - openssh-clients
+        state: latest
+
+    - name: Restart sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: restarted
