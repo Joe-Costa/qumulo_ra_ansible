@@ -21,7 +21,18 @@
       fail:
         msg: "qumulo-qcore is already loaded on this host!! Aborting playbook execution."
       when: "'qumulo-qcore.service' in ansible_facts.services"
-  
+
+    - name: Stop unattended-upgrades and apt timers
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - unattended-upgrades
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      ignore_errors: yes
+
     - name: Check if NetworkManager is active
       systemd:
         name: NetworkManager
@@ -136,11 +147,17 @@
         dest: /tmp/qumulo-core.deb
       when: remote_file_stat.stat.exists == False
       
-    - name: Wait for dpkg/apt locks to be released
+    - name: Wait for dpkg/apt locks to be released (up to 120s)
       ansible.builtin.shell: |
-        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+        for i in $(seq 1 24); do
+          if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 && \
+             ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then
+            exit 0
+          fi
           sleep 5
         done
+        echo "Timed out waiting for dpkg/apt locks"
+        exit 1
       args:
         executable: /bin/bash
       changed_when: false
