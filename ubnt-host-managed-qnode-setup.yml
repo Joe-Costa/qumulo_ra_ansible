@@ -71,6 +71,15 @@
         dest: /tmp/qumulo-core.deb
       when: remote_file_stat.stat.exists == False
 
+    - name: Wait for dpkg/apt locks to be released
+      ansible.builtin.shell: |
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+          sleep 5
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+
     - name: Install qumulo-core.deb
       apt:
         deb: /tmp/qumulo-core.deb
