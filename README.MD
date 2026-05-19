@@ -25,6 +25,8 @@ This process has been tested with:
 
 These playbooks install Qumulo Core in Qumulo-managed network mode, where the Qumulo process in the container manages its own network interfaces (bond0). The playbooks prepare the host OS networking stack to avoid conflicts with the container's bond0 interface.
 
+**Note:** Once the QFSD process starts in the container and takes over networking, the host will lose its original DHCP-assigned IP address and become unreachable from Ansible. The playbook may report errors for any tasks that run after this point. This is expected behavior -- the node will acquire a new IP via DHCP on the Qumulo-managed interface.
+
 | Playbook | Description |
 |---|---|
 | `ubnt-qnode-q-managed-network.yml` | Ubuntu/Debian - Disables Netplan, writes a static resolv.conf, stops NetworkManager, and installs qumulo-core with `QUMULO_NETWORK_MANAGED_BY_QUMULO=true` |
