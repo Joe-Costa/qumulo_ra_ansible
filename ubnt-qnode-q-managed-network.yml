@@ -35,7 +35,35 @@
       register: networkmanager_enabled
       failed_when: false
       changed_when: false
-    
+
+    - name: Disable netplan before Qumulo package install                                                                                                                                                                                                                       
+      block:                                                                                                                                                                                                                                                                    
+        - name: Back up and remove netplan configs
+          ansible.builtin.shell: |                                                                                                                                                                                                                                              
+            mkdir -p /etc/netplan.disabled                    
+            mv /etc/netplan/*.yaml /etc/netplan.disabled/ 2>/dev/null || true
+                                                                                                                                                                                                                                                                                
+        - name: Remove netplan-generated networkd files
+          ansible.builtin.shell: rm -f /run/systemd/network/*netplan*                                                                                                                                                                                                           
+                                                              
+        - name: Stop netplan from generating configs on boot                                                                                                                                                                                                                    
+          ansible.builtin.apt:
+            name: netplan.io                                                                                                                                                                                                                                                    
+            state: absent                                     
+            purge: true
+                                                                                                                                                                                                                                                                                
+        - name: Replace resolved symlink with static resolv.conf
+        # Edit these settings for your environment!
+          ansible.builtin.copy:                                                                                                                                                                                                                                                 
+            dest: /etc/resolv.conf                                                                                                                                                                                                                                              
+            content: |
+              nameserver 10.120.249.57                                                                                                                                                                                                                                          
+              nameserver 10.122.246.1                         
+              search qumulotest.local
+            mode: '0644'                                                                                                                                                                                                                                                        
+            follow: false   # overwrite the symlink, don't follow it
+            force: true   
+
     - name: Install linux-tools for the current kernel
       apt:
         name:
@@ -112,6 +140,8 @@
       apt:
         deb: /tmp/qumulo-core.deb
         state: present
+      environment:
+        QUMULO_NETWORK_MANAGED_BY_QUMULO: "true"
 
     # Reinstall openssh to match any OpenSSL version changes from qumulo-core dependencies
     - name: Reinstall openssh-server to match OpenSSL version

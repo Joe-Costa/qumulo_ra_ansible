@@ -83,26 +83,31 @@
         state: present
       when: "'rocky' in ansible_distribution | lower"
 
-    - name: Install systemd-container and systemd-resolved (Rocky only)
+    - name: Install systemd-container and systemd-resolved (Rocky and RHEL 9.4+)
       ansible.builtin.dnf:
         name:
           - systemd-container
           - systemd-resolved
         state: present
-      when: "'rocky' in ansible_distribution | lower"
+      when: >
+        ('rocky' in ansible_distribution | lower) or
+        (ansible_distribution in ['RedHat', 'Red Hat Enterprise Linux'] and
+         ansible_distribution_version is version('9.4', '>='))
 
     - name: Install sshpass
       ansible.builtin.dnf:
         name: sshpass
         state: present
 
-    - name: Install podman and systemd-resolved (RHEL only)
+    - name: Install podman and systemd-resolved (RHEL 9.3 and below)
       ansible.builtin.dnf:
         name:
           - podman
           - systemd-resolved
         state: present
-      when: ansible_distribution in ["RedHat", "Red Hat Enterprise Linux"]
+      when: >
+        ansible_distribution in ['RedHat', 'Red Hat Enterprise Linux'] and
+        ansible_distribution_version is version('9.4', '<')
 
     - name: Enable and start systemd-resolved
       ansible.builtin.systemd:

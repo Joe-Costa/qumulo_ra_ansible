@@ -1,0 +1,36 @@
+# This playbook removes qumulo-core from Ubuntu or Debian nodes.
+# Dependencies installed by the setup playbook will remain in place.
+---
+  - name: Remove qumulo-core from Ubuntu or Debian System
+    # Change this to match your hosts section
+    hosts: nodes
+    become: yes
+    # Change remote_user to match your Linux account
+    remote_user: qumulo
+    tasks:
+
+    - name: Verify distro compatibility with this playbook
+      fail:
+        msg: "This is the wrong playbook for a RHEL/Rocky node!!! Quitting..."
+      when: ansible_os_family == "RedHat"
+
+    - name: Gathering service facts
+      service_facts:
+
+    - name: Stop qumulo-qcore service if running
+      ansible.builtin.systemd:
+        name: qumulo-qcore
+        state: stopped
+      when: "'qumulo-qcore.service' in ansible_facts.services"
+      ignore_errors: yes
+
+    - name: Remove qumulo-core package
+      ansible.builtin.apt:
+        name: qumulo-core
+        state: absent
+        purge: true
+
+    - name: Clean up - Remove qumulo-core.deb from /tmp if present
+      ansible.builtin.file:
+        path: /tmp/qumulo-core.deb
+        state: absent
