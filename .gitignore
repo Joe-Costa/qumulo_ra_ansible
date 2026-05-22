@@ -1,1 +1,4 @@
 /qumulo-core.rpm
+govc-*
+hosts
+scrap
