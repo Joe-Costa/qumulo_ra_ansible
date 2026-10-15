@@ -68,9 +68,8 @@
           ansible.builtin.copy:                                                                                                                                                                                                                                                 
             dest: /etc/resolv.conf                                                                                                                                                                                                                                              
             content: |
-              nameserver 10.120.249.57                                                                                                                                                                                                                                          
-              nameserver 10.122.246.1                         
-              search qumulotest.local
+              nameserver 10.100.0.11                                                                                                                                                                                                                                          
+              search qumulo.com
             mode: '0644'                                                                                                                                                                                                                                                        
             follow: false   # overwrite the symlink, don't follow it
             force: true   
@@ -133,7 +132,7 @@
   
     - name: Check if qumulo-core.deb exists on Node and get its checksum
       ansible.builtin.stat:
-        path: /tmp/qumulo-core.deb
+        path: /home/qumulo/qumulo-core.deb
       register: remote_file_stat
       ignore_errors: yes
   
@@ -144,7 +143,7 @@
     - name: Copy qumulo-core.deb to Node if needed (This may take some time)
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/qumulo-core.deb"
-        dest: /tmp/qumulo-core.deb
+        dest: /home/qumulo/qumulo-core.deb
       when: remote_file_stat.stat.exists == False
       
     - name: Wait for dpkg/apt locks to be released (up to 120s)
@@ -164,7 +163,7 @@
 
     - name: Install qumulo-core.deb
       apt:
-        deb: /tmp/qumulo-core.deb
+        deb: /home/qumulo/qumulo-core.deb
         state: present
       environment:
         QUMULO_NETWORK_MANAGED_BY_QUMULO: "true"
@@ -177,12 +176,12 @@
           - openssh-client
         state: latest
 
-    - name: Restart sshd
+    - name: Restart ssh
       ansible.builtin.systemd:
-        name: sshd
+        name: ssh
         state: restarted
 
     - name: Clean up - Remove the qumulo-core.deb file
       file:
-        path: /tmp/qumulo-core.deb
+        path: /home/qumulo/qumulo-core.deb
         state: absent

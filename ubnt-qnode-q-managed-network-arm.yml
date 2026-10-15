@@ -1,0 +1,285 @@
+# This playbook is intended to configure Ubuntu hosted Qumulo nodes in Qumulo-managed network mode.
+# DO NOT USE this playbook if you intended to create a host-managed network Qumulo cluster.
+# ARM variant: adds dpkg multi-arch handling so an amd64 qumulo-core.deb can be installed on an arm64 host.
+---
+  - name: Configure Debian or Ubuntu system
+    # Change this to match your hosts section
+    hosts: nodes
+    become: yes
+    # Change remote_user to match your Linux account
+    remote_user: qumulo
+    tasks:
+  
+    - name: Verify Linux version
+      fail:
+        msg: "This is the wrong playbook for a RHEL/Rocky node!!! Quitting..."
+      when: ansible_os_family == "RedHat"
+  
+    - name: Gathering service facts
+      service_facts:
+  
+    - name: Check to see if qumulo-qcore is already present
+      fail:
+        msg: "qumulo-qcore is already loaded on this host!! Aborting playbook execution."
+      when: "'qumulo-qcore.service' in ansible_facts.services"
+
+    - name: Stop unattended-upgrades and apt timers
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - unattended-upgrades
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      ignore_errors: yes
+
+    - name: Check if NetworkManager is active
+      systemd:
+        name: NetworkManager
+        state: started
+      register: networkmanager_status
+      failed_when: false
+      changed_when: false
+  
+    - name: Check if NetworkManager is enabled
+      command: systemctl is-enabled NetworkManager
+      register: networkmanager_enabled
+      failed_when: false
+      changed_when: false
+
+    - name: Disable netplan before Qumulo package install                                                                                                                                                                                                                       
+      block:                                                                                                                                                                                                                                                                    
+        - name: Back up and remove netplan configs
+          ansible.builtin.shell: |                                                                                                                                                                                                                                              
+            mkdir -p /etc/netplan.disabled                    
+            mv /etc/netplan/*.yaml /etc/netplan.disabled/ 2>/dev/null || true
+                                                                                                                                                                                                                                                                                
+        - name: Remove netplan-generated networkd files
+          ansible.builtin.shell: rm -f /run/systemd/network/*netplan*                                                                                                                                                                                                           
+                                                              
+        - name: Stop netplan from generating configs on boot                                                                                                                                                                                                                    
+          ansible.builtin.apt:
+            name: netplan.io                                                                                                                                                                                                                                                    
+            state: absent                                     
+            purge: true
+                                                                                                                                                                                                                                                                                
+        - name: Replace resolved symlink with static resolv.conf
+        # Edit these settings for your environment!
+          ansible.builtin.copy:                                                                                                                                                                                                                                                 
+            dest: /etc/resolv.conf                                                                                                                                                                                                                                              
+            content: |
+              nameserver 10.100.0.11                                                                                                                                                                                                                                          
+              search qumulo.com
+            mode: '0644'                                                                                                                                                                                                                                                        
+            follow: false   # overwrite the symlink, don't follow it
+            force: true   
+
+    - name: Install linux-tools for the current kernel
+      apt:
+        name:
+          - "linux-tools-{{ ansible_kernel }}"
+        state: present
+        update_cache: yes
+
+    - name: Check if systemd-networkd is active
+      systemd:
+        name: systemd-networkd
+        state: started
+      register: systemd_networkd_status
+      failed_when: false
+      changed_when: false   
+
+    - name: Stop systemd-timesyncd if in use
+      ansible.builtin.systemd:
+        name: systemd-timesyncd.service
+        state: stopped
+      ignore_errors: yes
+    
+    - name: Mask and stop systemd-timesyncdapparmor_parser
+      ansible.builtin.shell: >
+        systemctl mask --now systemd-timesyncdapparmor_parser -R /etc/apparmor.d/usr.sbin.chronyd ||
+        echo "apparmor not in use"
+      args:
+        executable: /bin/bash
+      ignore_errors: yes
+    
+    - name: Stop NetworkManager if needed
+      ansible.builtin.systemd:
+        name: NetworkManager
+        enabled: no
+        state: stopped
+      when: networkmanager_status == "started"
+    
+    - name: Disable NetworkManager if needed
+      ansible.builtin.systemd:
+        name: NetworkManager
+        enabled: no
+        state: stopped
+      when: networkmanager_enabled.stdout == "enabled"
+  
+    - name: Enable and start systemd-networkd
+      ansible.builtin.systemd:
+        name: systemd-networkd
+        enabled: yes
+        state: started
+      when: systemd_networkd_status != "started"
+  
+    - name: Install systemd-container
+      ansible.builtin.apt:
+        name:
+          - systemd-container
+        state: present
+  
+    - name: Check if qumulo-core.deb exists on Node and get its checksum
+      ansible.builtin.stat:
+        path: /home/qumulo/qumulo-core.deb
+      register: remote_file_stat
+      ignore_errors: yes
+  
+    - name: Report state of qumulo-core.deb on remote node
+      ansible.builtin.debug:
+        msg: "qumulo-core.deb is present: {{ remote_file_stat.stat.exists }}, Checksum: {{ remote_file_stat.stat.checksum if remote_file_stat.stat.exists else 'N/A' }}"
+      
+    - name: Copy qumulo-core.deb to Node if needed (This may take some time)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/qumulo-core.deb"
+        dest: /home/qumulo/qumulo-core.deb
+      when: remote_file_stat.stat.exists == False
+      
+    - name: Wait for dpkg/apt locks to be released (up to 120s)
+      ansible.builtin.shell: |
+        for i in $(seq 1 24); do
+          if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 && \
+             ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then
+            exit 0
+          fi
+          sleep 5
+        done
+        echo "Timed out waiting for dpkg/apt locks"
+        exit 1
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    # Multi-arch support: allow an amd64 qumulo-core.deb to install on an ARM (arm64) host.
+    # These tasks are skipped when the .deb architecture matches the host.
+    - name: Get native dpkg architecture
+      ansible.builtin.command: dpkg --print-architecture
+      register: native_arch
+      changed_when: false
+
+    - name: Get qumulo-core.deb architecture
+      ansible.builtin.command: dpkg-deb -f /home/qumulo/qumulo-core.deb Architecture
+      register: deb_arch
+      changed_when: false
+
+    - name: Configure foreign architecture for qumulo-core.deb
+      when: deb_arch.stdout not in [native_arch.stdout, 'all']
+      block:
+        - name: Report architecture mismatch
+          ansible.builtin.debug:
+            msg: "Host is {{ native_arch.stdout }}, qumulo-core.deb is {{ deb_arch.stdout }}. Enabling {{ deb_arch.stdout }} multi-arch."
+
+        - name: Get foreign architectures
+          ansible.builtin.command: dpkg --print-foreign-architectures
+          register: foreign_archs
+          changed_when: false
+
+        - name: Add foreign architecture to dpkg
+          ansible.builtin.command: "dpkg --add-architecture {{ deb_arch.stdout }}"
+          when: deb_arch.stdout not in foreign_archs.stdout_lines
+
+        # Ubuntu ARM mirrors (ports.ubuntu.com) only carry ARM packages, and amd64 packages
+        # live on archive/security.ubuntu.com. Pin existing sources to the native arch and
+        # add amd64 sources so apt update does not fail with 404s.
+        - name: Check for deb822 Ubuntu sources file
+          ansible.builtin.stat:
+            path: /etc/apt/sources.list.d/ubuntu.sources
+          register: ubuntu_sources
+          when: ansible_distribution == "Ubuntu"
+
+        - name: Check if deb822 sources already declare Architectures
+          ansible.builtin.command: grep -q '^Architectures:' /etc/apt/sources.list.d/ubuntu.sources
+          register: ubuntu_sources_has_arch
+          failed_when: false
+          changed_when: false
+          when: ansible_distribution == "Ubuntu" and ubuntu_sources.stat.exists
+
+        - name: Pin deb822 ports.ubuntu.com sources to native architecture
+          ansible.builtin.replace:
+            path: /etc/apt/sources.list.d/ubuntu.sources
+            regexp: '^(URIs:\s*\S*ports\.ubuntu\.com\S*)$'
+            replace: '\1\nArchitectures: {{ native_arch.stdout }}'
+          when: ansible_distribution == "Ubuntu" and ubuntu_sources.stat.exists and ubuntu_sources_has_arch.rc != 0
+
+        - name: Pin legacy ports.ubuntu.com sources (no options) to native architecture
+          ansible.builtin.replace:
+            path: /etc/apt/sources.list
+            regexp: '^deb\s+(?!\[)(\S*ports\.ubuntu\.com)'
+            replace: 'deb [arch={{ native_arch.stdout }}] \1'
+          when: ansible_distribution == "Ubuntu"
+
+        - name: Pin legacy ports.ubuntu.com sources (with options) to native architecture
+          ansible.builtin.replace:
+            path: /etc/apt/sources.list
+            regexp: '^deb\s+\[((?:(?!arch=)[^\]])*)\]\s+(\S*ports\.ubuntu\.com)'
+            replace: 'deb [arch={{ native_arch.stdout }} \1] \2'
+          when: ansible_distribution == "Ubuntu"
+
+        - name: Add Ubuntu sources for foreign architecture
+          ansible.builtin.copy:
+            dest: "/etc/apt/sources.list.d/ubuntu-{{ deb_arch.stdout }}.sources"
+            content: |
+              Types: deb
+              URIs: http://archive.ubuntu.com/ubuntu/
+              Suites: {{ ansible_distribution_release }} {{ ansible_distribution_release }}-updates {{ ansible_distribution_release }}-backports
+              Components: main restricted universe multiverse
+              Architectures: {{ deb_arch.stdout }}
+              Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+              Types: deb
+              URIs: http://security.ubuntu.com/ubuntu/
+              Suites: {{ ansible_distribution_release }}-security
+              Components: main restricted universe multiverse
+              Architectures: {{ deb_arch.stdout }}
+              Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+            mode: '0644'
+          when: ansible_distribution == "Ubuntu"
+
+        - name: Update apt cache with foreign architecture
+          ansible.builtin.apt:
+            update_cache: yes
+
+        # amd64 binaries (including package maintainer scripts) cannot run natively on ARM.
+        # qemu-user-static registers binfmt handlers so they run under emulation.
+        - name: Install qemu user-mode emulation for foreign binaries
+          ansible.builtin.apt:
+            name:
+              - qemu-user-static
+            state: present
+
+    - name: Install qumulo-core.deb
+      apt:
+        deb: /home/qumulo/qumulo-core.deb
+        state: present
+      environment:
+        QUMULO_NETWORK_MANAGED_BY_QUMULO: "true"
+
+    # Reinstall openssh to match any OpenSSL version changes from qumulo-core dependencies
+    - name: Reinstall openssh-server to match OpenSSL version
+      ansible.builtin.apt:
+        name:
+          - openssh-server
+          - openssh-client
+        state: latest
+
+    - name: Restart ssh
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted
+
+    - name: Clean up - Remove the qumulo-core.deb file
+      file:
+        path: /home/qumulo/qumulo-core.deb
+        state: absent
